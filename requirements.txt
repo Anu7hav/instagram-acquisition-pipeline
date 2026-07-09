@@ -1,7 +1,6 @@
 # ── Acquisition ───────────────────────────────────────────
 requests
 python-dotenv
-twikit
 
 # ── NLP Core ──────────────────────────────────────────────
 nltk

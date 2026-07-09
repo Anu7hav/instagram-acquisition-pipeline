@@ -36,3 +36,13 @@ NLP_DIR          = "data/nlp"
 MIN_CREDITS_THRESHOLD = 500   # warn if credits fall below this
 STOP_ON_LOW_CREDITS   = True  # stop pipeline if below threshold
 RETRY_CODES = {429, 500, 502, 503}
+
+# ── Instagram Graph API settings ──────────────────────────────────────────────
+IG_BASE_URL       = "https://graph.instagram.com"
+IG_ACCOUNT_FIELDS = "id,username,account_type,media_count"
+IG_MEDIA_FIELDS   = "id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count"
+IG_COMMENT_FIELDS = "id,text,username,timestamp,like_count"
+
+IG_POST_LIMIT     = 25
+IG_COMMENT_LIMIT  = 50
+IG_MIN_TOKEN_DAYS_REMAINING = 10

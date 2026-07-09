@@ -1,0 +1,32 @@
+# ── Acquisition ───────────────────────────────────────────
+requests
+python-dotenv
+twikit
+
+# ── NLP Core ──────────────────────────────────────────────
+nltk
+spacy
+langdetect
+emoji
+
+# ── Sentiment Analysis ────────────────────────────────────
+vaderSentiment
+transformers
+torch
+
+# ── Topic Modelling ───────────────────────────────────────
+bertopic
+
+# ── Keyword Extraction & ML ───────────────────────────────
+scikit-learn
+
+# ── Progress & Utilities ──────────────────────────────────
+tqdm
+
+# ── Database & Analysis ───────────────────────────────────
+pandas
+matplotlib
+seaborn
+wordcloud
+
+# ── Visualisation ─────────────────────────────────────────

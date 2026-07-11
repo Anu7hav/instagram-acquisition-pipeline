@@ -188,6 +188,7 @@ Generates `data/analysis/report_ig.md`.
 - **`SCHEDULER_ENABLED`** defaults to `False`. Flip deliberately, not by
   accident — it loops for `RUN_INTERVAL_HOURS` (default 2h) indefinitely
   otherwise.
+- **Access token rotated 2026-07-11 as a final security precaution before repo handoff/review.
 
 ---
 

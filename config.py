@@ -21,7 +21,7 @@ PAGE_DELAY    = 5          # seconds between pagination pages
 QUERY_DELAY   = 5          # seconds between queries
 
 # ── Scheduler settings ────────────────────────────────────────────────────────
-SCHEDULER_ENABLED    = True   # set False to run just once
+SCHEDULER_ENABLED    = False   # set False to run just once
 RUN_INTERVAL_HOURS   = 2      # hours between each full pipeline run
 MAX_RUNS             = 0      # 0 = run forever, N = stop after N runs
 

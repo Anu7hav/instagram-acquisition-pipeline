@@ -14,15 +14,18 @@ still useful for logging/DB tagging, just not as a URL path segment here.
 
 import logging
 import time
-from ig_client import get, ACCOUNT_ID
-from config import IG_MEDIA_FIELDS, IG_COMMENT_FIELDS, IG_POST_LIMIT, IG_COMMENT_LIMIT, QUERY_DELAY
+from ig_client import get, get_url, ACCOUNT_ID
+from config import (IG_MEDIA_FIELDS, IG_COMMENT_FIELDS, IG_POST_LIMIT, IG_COMMENT_LIMIT,
+                     QUERY_DELAY, MAX_PAGES, PAGE_DELAY)
 
 log = logging.getLogger(__name__)
 
 
-def fetch_posts(account_id=ACCOUNT_ID, limit=IG_POST_LIMIT):
-    """Fetch recent posts (media objects) for the account. Always calls the
-    'me' alias, not the raw account_id, per the Business Login quirk above."""
+def fetch_posts(account_id=ACCOUNT_ID, limit=IG_POST_LIMIT, max_pages=MAX_PAGES):
+    """Fetch recent posts (media objects) for the account, following
+    pagination up to max_pages. Previously this silently stopped at the
+    first page (up to `limit` posts) with no warning if more existed —
+    fixed 2026-07-11."""
     log.info(f"Fetching posts for account {account_id} (via /me alias)")
     params = {"fields": IG_MEDIA_FIELDS, "limit": limit}
     success, data = get("/me/media", params)
@@ -32,12 +35,34 @@ def fetch_posts(account_id=ACCOUNT_ID, limit=IG_POST_LIMIT):
         return False, []
 
     posts = data.get("data", [])
-    log.info(f"  ✓ {len(posts)} posts fetched")
+    pages_fetched = 1
+    next_url = data.get("paging", {}).get("next")
+
+    while next_url and pages_fetched < max_pages:
+        log.info(f"  Fetching posts page {pages_fetched + 1}...")
+        success, data = get_url(next_url)
+        if not success:
+            log.warning("  Pagination request failed — stopping with partial results")
+            break
+        page_posts = data.get("data", [])
+        if not page_posts:
+            break
+        posts.extend(page_posts)
+        next_url = data.get("paging", {}).get("next")
+        pages_fetched += 1
+        time.sleep(PAGE_DELAY)
+
+    if next_url:
+        log.warning(f"  Reached MAX_PAGES={max_pages} — more posts likely exist beyond "
+                    f"the {len(posts)} fetched. Raise MAX_PAGES in config.py to pull more.")
+
+    log.info(f"  ✓ {len(posts)} posts fetched across {pages_fetched} page(s)")
     return True, posts
 
 
-def fetch_comments(media_id, limit=IG_COMMENT_LIMIT):
-    """Fetch comments for a single post."""
+def fetch_comments(media_id, limit=IG_COMMENT_LIMIT, max_pages=MAX_PAGES):
+    """Fetch comments for a single post, following pagination up to max_pages —
+    same silent-truncation risk as posts existed here before this fix."""
     params = {"fields": IG_COMMENT_FIELDS, "limit": limit}
     success, data = get(f"/{media_id}/comments", params)
 
@@ -45,7 +70,27 @@ def fetch_comments(media_id, limit=IG_COMMENT_LIMIT):
         log.warning(f"  Failed to fetch comments for media {media_id}")
         return []
 
-    return data.get("data", [])
+    comments = data.get("data", [])
+    pages_fetched = 1
+    next_url = data.get("paging", {}).get("next")
+
+    while next_url and pages_fetched < max_pages:
+        success, data = get_url(next_url)
+        if not success:
+            break
+        page_comments = data.get("data", [])
+        if not page_comments:
+            break
+        comments.extend(page_comments)
+        next_url = data.get("paging", {}).get("next")
+        pages_fetched += 1
+        time.sleep(PAGE_DELAY)
+
+    if next_url:
+        log.warning(f"  Comments for {media_id}: reached MAX_PAGES={max_pages} — "
+                    f"more comments likely exist beyond the {len(comments)} fetched.")
+
+    return comments
 
 
 def fetch_account_data(account_id=ACCOUNT_ID, post_limit=IG_POST_LIMIT, comment_limit=IG_COMMENT_LIMIT):

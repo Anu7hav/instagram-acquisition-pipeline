@@ -89,6 +89,45 @@ def get(endpoint, params=None):
     return False, None
 
 
+def get_url(full_url):
+    """
+    Follow an already-complete Graph API URL as-is (e.g. paging.next / .previous
+    from a prior response — these already include access_token and all params).
+    Same retry/backoff behavior as get(), just skips URL construction.
+    """
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = requests.get(full_url, timeout=15)
+
+            if response.status_code in RETRY_CODES:
+                wait = RATE_LIMIT_DELAY if response.status_code == 429 else RETRY_DELAY
+                log.warning(f"  HTTP {response.status_code}. Attempt {attempt+1}/{MAX_RETRIES} — retrying in {wait}s...")
+                time.sleep(wait)
+                continue
+
+            success, data = handle_ig_response(response)
+
+            if not success and isinstance(data, dict) and data.get("_retry"):
+                log.warning(f"  Graph API signaled retry. Attempt {attempt+1}/{MAX_RETRIES} — retrying in {RATE_LIMIT_DELAY}s...")
+                time.sleep(RATE_LIMIT_DELAY)
+                continue
+
+            return success, data
+
+        except requests.exceptions.Timeout:
+            log.warning(f"  Timeout. Attempt {attempt+1}/{MAX_RETRIES}")
+        except requests.exceptions.ConnectionError:
+            log.warning(f"  Connection error. Attempt {attempt+1}/{MAX_RETRIES}")
+        except requests.exceptions.RequestException as e:
+            log.error(f"  Request failed: {e}")
+
+        if attempt < MAX_RETRIES - 1:
+            time.sleep(RETRY_DELAY)
+
+    log.error("  All retry attempts failed (pagination request).")
+    return False, None
+
+
 def check_token():
     """
     Verify the access token is alive by hitting /me.

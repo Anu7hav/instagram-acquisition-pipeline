@@ -1,48 +1,39 @@
 """
-config.py — Central configuration for the Twitter acquisition pipeline.
-Fix #6: All settings moved here. Import with: from config import *
+config.py — Central configuration for the Instagram acquisition pipeline.
+Import with: from config import *
 """
 
 # ── Pipeline version ──────────────────────────────────────────────────────────
 PIPELINE_VERSION = "2.0.0"
 
-# ── Query settings ────────────────────────────────────────────────────────────
-QUERY_TYPE    = "Latest"   # "Latest" or "Top"
-COUNT         = 20         # tweets per page
-MAX_PAGES     = 3          # max pagination pages (twitterapi.io only)
-USE_PAGINATION = False     # Fix #2: Twikit can't paginate → False uses fetch_tweets()
-                           # True uses paginator with twitterapi.io cursor
-
 # ── Retry / delay settings ────────────────────────────────────────────────────
-MAX_RETRIES   = 3
-RETRY_DELAY   = 3          # seconds between retries
-RATE_LIMIT_DELAY = 10      # seconds to wait on 429
-PAGE_DELAY    = 5          # seconds between pagination pages
-QUERY_DELAY   = 5          # seconds between queries
+MAX_RETRIES       = 3
+RETRY_DELAY       = 3      # seconds between retries
+RATE_LIMIT_DELAY  = 10     # seconds to wait on 429 / throttling
+MAX_PAGES         = 3      # max pagination pages per fetch (posts and comments)
+PAGE_DELAY        = 5      # seconds between pagination pages
+QUERY_DELAY       = 5      # seconds between accounts / between post-comment calls
+RETRY_CODES       = {429, 500, 502, 503}
 
 # ── Scheduler settings ────────────────────────────────────────────────────────
-SCHEDULER_ENABLED    = False   # set False to run just once
-RUN_INTERVAL_HOURS   = 2      # hours between each full pipeline run
+SCHEDULER_ENABLED    = False  # set True to loop every RUN_INTERVAL_HOURS
+RUN_INTERVAL_HOURS   = 2
 MAX_RUNS             = 0      # 0 = run forever, N = stop after N runs
 
 # ── File paths ────────────────────────────────────────────────────────────────
-QUERIES_FILE     = "queries.txt"
-COOKIES_FILE     = "twikit_cookies.json"
-RAW_DATA_DIR     = "data/raw"
-PROCESSED_DIR    = "data/processed"
-NLP_DIR          = "data/nlp"
-
-# ── Credit warning settings ───────────────────────────────────────────────────
-MIN_CREDITS_THRESHOLD = 500   # warn if credits fall below this
-STOP_ON_LOW_CREDITS   = True  # stop pipeline if below threshold
-RETRY_CODES = {429, 500, 502, 503}
+RAW_DATA_DIR      = "data/raw"
+PROCESSED_DIR     = "data/processed"
+NLP_DIR           = "data/nlp"
 
 # ── Instagram Graph API settings ──────────────────────────────────────────────
-IG_BASE_URL       = "https://graph.instagram.com"
+IG_BASE_URL       = "https://graph.instagram.com"   # Business Login host — no version prefix
 IG_ACCOUNT_FIELDS = "id,username,account_type,media_count"
 IG_MEDIA_FIELDS   = "id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count"
 IG_COMMENT_FIELDS = "id,text,username,timestamp,like_count"
 
-IG_POST_LIMIT     = 25
-IG_COMMENT_LIMIT  = 50
+IG_POST_LIMIT     = 25    # posts per page (pagination follows paging.next up to MAX_PAGES)
+IG_COMMENT_LIMIT  = 50    # comments per page, per post
+
+# Long-lived tokens last 60 days and are NOT auto-renewed by Meta.
+# Refresh proactively once this many days remain.
 IG_MIN_TOKEN_DAYS_REMAINING = 10

@@ -1,0 +1,11 @@
+# One Instagram username per line — must be an account you have
+# tester/admin access to on this app (see App Roles in the Meta Dashboard).
+# Lines starting with # are ignored.
+#
+# NOTE: as of now, only ONE account is actually usable per run — the
+# Business Login token is tied to a single account, and fetch_ig.py always
+# pulls that token's own account via the /me alias. This file exists for
+# structural parity with queries.txt; genuine multi-account support needs
+# per-account token management, which isn't built yet.
+
+meanubhavekr

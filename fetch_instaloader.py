@@ -149,7 +149,7 @@ if __name__ == "__main__":
               f"{post['like_count']} likes | {post['comments_count']} comments | {caption!r}")
 
     raw_path = save_raw(target, data)
-    processed_path = save_processed_ig(target, data)
+    processed_path = save_processed_ig(target, data, source="instaloader")
     print(f"\n✓ Raw saved      → {raw_path}")
     print(f"✓ Processed saved → {processed_path}")
     print(f"\nNote: comment text is empty for every post — see fetch_instaloader.py docstring.")

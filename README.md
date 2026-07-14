@@ -1,147 +1,119 @@
 # Instagram Data Acquisition & Analysis Pipeline
 
-A complete end-to-end pipeline for acquiring, preprocessing, and analysing
-Instagram Business/Creator account data via the official Instagram Graph API
-(Business Login) — NOT scraping. Includes sentiment analysis (VADER +
-RoBERTa), named entity recognition (spaCy), topic modelling (BERTopic), and
-keyword extraction (TF-IDF).
+A pipeline for acquiring, preprocessing, and analysing Instagram post data,
+with sentiment analysis (VADER + RoBERTa), named entity recognition (spaCy),
+topic modelling (BERTopic), and keyword extraction (TF-IDF).
+
+Two independent data-source paths feed the same downstream pipeline:
+
+| | Official Graph API | Instaloader (session-based) |
+|---|---|---|
+| **Source accounts** | Only accounts that explicitly authorize this app as a Tester (realistically: accounts you control) | Any public account, no authorization needed |
+| **Comment text** | ✅ Full comment text and metadata | ❌ Comment count only, no text |
+| **Stability / ToS** | Sanctioned, stable, official | Unofficial — breaks when Instagram changes its frontend, violates Instagram's ToS, carries real account-risk |
+| **Files** | `ig_client.py`, `fetch_ig.py`, `main_ig.py` | `fetch_instaloader.py`, `import_firefox_session.py` |
+
+Both paths write into the **same** `save_raw.py` / `save_processed_ig.py` /
+`db_manager_ig.py` / `preprocess_ig.py` / `analysis_ig.py` layer — a post is
+a post regardless of which path fetched it, distinguished only by a
+`source` field (`graph_api` vs `instaloader`).
 
 ---
 
 ## Pipeline Overview
 
 ```
-accounts.txt
-    │
-    ▼
-main_ig.py                          ← orchestrates one full pass
-    │
-    ├─ ig_client.py                 ← Graph API HTTP client (retry/backoff, pagination)
-    ├─ fetch_ig.py                  ← pulls posts + comments for one account
-    │
-    ▼
-save_raw.py → data/raw/             ← raw API response
-    │
-    ▼
-save_processed_ig.py → data/processed/  ← cleaned post fields + nested comments
-    │
-    ▼
-preprocess_ig.py → data/nlp/        ← NLP enrichment (spaCy, VADER, RoBERTa, BERTopic, TF-IDF)
-    │                                  + writes directly to pipeline_ig.db
-    ▼
-analysis_ig.py → data/analysis/     ← JSON results, queries pipeline_ig.db
-    │
-    ▼
-visualise_ig.py → data/charts/      ← 5–7 charts (PNG)
-sentiment_report_ig.py → report_ig.md  ← auto-generated insight report
+                    ┌─ ig_client.py + fetch_ig.py ─────────┐  (own account, official API)
+accounts.txt / CLI ─┤                                       ├─→ save_raw.py
+                    └─ fetch_instaloader.py ─────────────────┘  (any public account, session-based)
+                                    │
+                                    ▼
+                    save_processed_ig.py → data/processed/
+                                    │
+                                    ▼
+                    preprocess_ig.py → data/nlp/ + pipeline_ig.db
+                                    │
+                                    ▼
+                    analysis_ig.py → data/analysis/
+                                    │
+                                    ▼
+        visualise_ig.py → data/charts/     sentiment_report_ig.py → report_ig.md
 ```
 
-**Note:** `main_ig.py` only runs fetch + save. NLP/analysis/charts are
-separate manual steps (`preprocess_ig.py` → `analysis_ig.py` →
-`visualise_ig.py` → `sentiment_report_ig.py`), run individually as needed.
+`main_ig.py` only orchestrates the official-API path (fetch + save for the
+account in `accounts.txt`). The Instaloader path is currently a separate
+manual script — run it, then run `preprocess_ig.py` onward same as always,
+since those steps scan `data/processed/` generically regardless of source.
 
 ---
 
-## Why Only the Official Graph API
+## Path 1: Official Graph API (own account)
 
-Unofficial scraping of Instagram gets accounts flagged/banned quickly, so
-this pipeline uses **only** the official Graph API. Practical implications:
-
-- Requires a registered Meta Developer app + Instagram Business/Creator account
-- Can only pull data for accounts you have tester/admin access to — not
-  arbitrary public accounts (see `accounts.txt`)
-- A Business Login token is tied to exactly one account — true multi-account
-  support isn't built yet; `accounts.txt` currently only supports one real entry
-- Comments get their own DB table (`comments`) and their own report section
-
----
-
-## Setup
-
-### 1. Register a Meta Developer app
+### Setup
 - developers.facebook.com → Create App → Business
 - Add Instagram product → "API setup with Instagram login" (Business Login —
-  does NOT require linking a Facebook Page, unlike the older Facebook Login flow)
+  does NOT require linking a Facebook Page)
 - Add your Instagram account as an **Instagram Tester** (App Roles → Roles)
 - Grant `instagram_business_basic` + `instagram_business_manage_comments`
-  under Permissions and features — **both** need to show "Ready for testing",
-  not just be added to the app's permission list (confirmed bug: adding via
-  "Add all required permissions" alone did not activate `manage_comments`;
-  had to click "Add" on that row individually)
-- Generate a long-lived access token from the App Dashboard
-- **Publish the app to Live mode** — required for the `/comments` endpoint to
-  return real data. In Development mode, `/comments` returns an empty `data`
-  array even when `comments_count` on the media object is nonzero, with no
-  error to explain why. Check this first if comments ever silently come back
-  empty.
+  under Permissions and features — **both** need to show "Ready for testing,"
+  not just "added" (confirmed bug: "Add all required permissions" alone did
+  not activate `manage_comments`; had to click "Add" on that row individually)
+- Generate a long-lived access token
+- **Publish the app to Live mode** — required for `/comments` to return real
+  data. In Development mode it silently returns an empty array with no error,
+  even when `comments_count` on the post is nonzero.
 
-### 2. Clone and set up
+### Run
 ```bash
-git clone https://github.com/Anu7hav/instagram-acquisition-pipeline.git
-cd instagram-acquisition-pipeline
-python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # Linux/Mac
-pip install -r requirements.txt
-python -m spacy download en_core_web_sm
-```
-
-### 3. Configure environment
-Create a `.env` file in the root directory (never commit this):
-```
-IG_ACCESS_TOKEN=your_long_lived_token
-IG_APP_SECRET=your_app_secret
-IG_ACCOUNT_ID=your_ig_business_account_id
-```
-
-### 4. Add accounts
-Edit `accounts.txt` — currently only one real entry is usable (see the
-multi-account limitation above):
-```
-your_instagram_username
+python main_ig.py          # fetch + save for accounts.txt
+python preprocess_ig.py    # NLP
+python analysis_ig.py      # analysis
+python visualise_ig.py     # charts
+python sentiment_report_ig.py  # report
 ```
 
 ---
 
-## Running the Pipeline
+## Path 2: Instaloader (any public account)
 
-### Full acquisition run
-```bash
-python main_ig.py
-```
-Fetches posts + comments for the account in `accounts.txt`, saves raw +
-processed JSON. Set `SCHEDULER_ENABLED = True` in `config.py` to run on a
-loop (`RUN_INTERVAL_HOURS`) — defaults to `False` (single run) for safety.
+Used when the target account won't/can't authorize this app (e.g. news
+outlets, public figures) — the official API has no search/discovery
+capability for accounts you don't control.
 
-### Preprocess NLP
-```bash
-python preprocess_ig.py
-```
-Runs spaCy NER, VADER, RoBERTa, TF-IDF, BERTopic on all `data/processed/`
-files, writes to `data/nlp/` and `pipeline_ig.db`. Captionless posts
-(common on Instagram) are NOT dropped — only caption-dependent NLP fields
-default to neutral/empty; engagement data is always kept.
+⚠️ **This path is NOT the official API.** It works by reusing an
+already-authenticated browser session, which:
+- Violates Instagram's Terms of Service
+- Can break without warning whenever Instagram changes its frontend
+  (confirmed — happened mid-project, June 2026 GraphQL endpoint deprecation
+  broke anonymous-mode fetching entirely)
+- Carries real account-risk for whichever account is used
 
-### Run analysis
-```bash
-python analysis_ig.py
-```
-Generates `data/analysis/analysis_results_ig.json` — sentiment, entities,
-hashtags, keywords, engagement, volume, VADER/RoBERTa agreement, most-commented
-posts.
+**Never fetches comment text** — only a comment count. Kept deliberately
+conservative: no bulk automation, small manual runs, real delays between
+requests.
 
-### Generate charts
-```bash
-python visualise_ig.py
-```
-Saves up to 7 charts to `data/charts/`. Wordcloud/hashtag charts skip
-gracefully (with a warning, not a crash) if no captions/hashtags exist yet.
+### Setup
+1. Install: `pip install instaloader`
+2. Log into Instagram **completely normally** in Firefox, using an account
+   you're comfortable using for this (not a primary personal account)
+3. Close Firefox
+4. Import that session (bypasses Instaloader's own login flow, which
+   triggered repeated Instagram security checkpoints when tested directly):
+   ```bash
+   python import_firefox_session.py
+   ```
 
-### Auto insight report
+### Run
 ```bash
-python sentiment_report_ig.py
+python fetch_instaloader.py <username> [limit] [login_as]
+python fetch_instaloader.py ndtv 10 your_account_username
 ```
-Generates `data/analysis/report_ig.md`.
+Anonymous mode (omitting `login_as`) is currently broken by an open,
+unresolved Instaloader bug (403 on the GraphQL endpoint) — use the
+logged-in/session-import method above.
+
+Then continue the pipeline as normal — `preprocess_ig.py` onward already
+picks up the new data automatically, no extra steps needed.
 
 ---
 
@@ -149,10 +121,10 @@ Generates `data/analysis/report_ig.md`.
 
 | Table | Description |
 |-------|-------------|
-| `accounts` | Unique Instagram usernames pulled |
+| `accounts` | Unique Instagram usernames pulled (either path) |
 | `fetch_runs` | One row per processed JSON file |
-| `posts` | Base post fields — caption, media type/url, likes, comment count |
-| `comments` | Flattened per-post comments |
+| `posts` | Base post fields — caption, media type/url, likes, comment count, `source` |
+| `comments` | Flattened per-post comments — empty for Instaloader-sourced posts |
 | `post_nlp` | NLP enrichment — sentiment, tokens, entities |
 | `entities` | Named entities, normalized |
 | `hashtags` | One row per hashtag per post (NLP-derived from captions) |
@@ -177,37 +149,49 @@ Generates `data/analysis/report_ig.md`.
 
 ## Known Limitations / Open Items
 
-- **Only tested at small scale so far** — real volume (dozens of posts, deep
-  comment threads) should be stress-tested before relying on this in production.
-- **Single account per token** — `accounts.txt` supports listing multiple
-  usernames structurally, but `fetch_ig.py` always pulls the token's own
-  account via the `/me` alias. Real multi-account support needs per-account
-  token management, not built yet.
-- **Comment-level NLP not implemented** — sentiment/entities/keywords run on
-  post captions only; individual comment text is stored but not analyzed.
+- **Comment TEXT only available via the official API**, and only for
+  accounts that authorize this app — Instaloader never returns comment
+  content, only counts, for any account.
+- **Instaloader path is inherently unstable** — it broke once already
+  during this project (Instagram deprecated a GraphQL endpoint in June
+  2026) and could break again without warning. Not suitable as the sole
+  data source for anything that needs long-term reliability.
+- **Single account per token** on the official API path — `accounts.txt`
+  supports listing multiple usernames structurally, but `fetch_ig.py`
+  always pulls the token's own account via the `/me` alias.
+- **Comment-level NLP not implemented** — sentiment/entities/keywords run
+  on post captions only.
 - **`SCHEDULER_ENABLED`** defaults to `False`. Flip deliberately, not by
-  accident — it loops for `RUN_INTERVAL_HOURS` (default 2h) indefinitely
-  otherwise.
+  accident.
+- Official API and Instaloader paths are NOT wired into a single
+  orchestrator — run them as separate manual steps.
 
 ---
 
 ## Project Structure
 
 ```
-├── main_ig.py              # Pipeline entry point + scheduler
-├── config.py                # Central configuration
+Official API path:
+├── main_ig.py              # Orchestrator (own account, official API)
 ├── ig_client.py              # Graph API HTTP client (retry/backoff, pagination, token refresh)
 ├── fetch_ig.py                # Posts + comments fetch, paginated
 ├── ig_error_handler.py        # Graph API response/error parsing
-├── save_raw.py                # Save raw API response
+├── accounts.txt                # Authorized usernames (own account only, currently)
+
+Instaloader path:
+├── fetch_instaloader.py       # Public-account fetch (session-based)
+├── import_firefox_session.py  # Firefox cookie import, bypasses Instaloader's login flow
+
+Shared pipeline (both paths):
+├── config.py                # Central configuration
+├── save_raw.py                # Save raw response
 ├── save_processed_ig.py       # Save cleaned post fields + nested comments
 ├── preprocess_ig.py           # Full NLP pipeline
 ├── db_manager_ig.py           # SQLite schema + insert functions (10 tables)
 ├── analysis_ig.py             # Compute analysis from DB → JSON
 ├── visualise_ig.py            # Generate charts from JSON
 ├── sentiment_report_ig.py     # Auto insight report (Markdown)
-├── test_ig.py                  # Standalone smoke test (fetch → save → DB insert)
-└── accounts.txt                # IG usernames (currently single-account only)
+├── test_ig.py                  # Standalone smoke test (official API path)
 ```
 
 ---

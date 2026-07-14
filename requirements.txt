@@ -1,6 +1,7 @@
 # ── Acquisition ───────────────────────────────────────────
 requests
 python-dotenv
+instaloader
 
 # ── NLP Core ──────────────────────────────────────────────
 nltk
@@ -27,5 +28,3 @@ pandas
 matplotlib
 seaborn
 wordcloud
-
-# ── Visualisation ─────────────────────────────────────────

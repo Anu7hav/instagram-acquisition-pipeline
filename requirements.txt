@@ -2,6 +2,7 @@
 requests
 python-dotenv
 instaloader
+instagrapi
 
 # ── NLP Core ──────────────────────────────────────────────
 nltk

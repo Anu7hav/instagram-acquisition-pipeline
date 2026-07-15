@@ -112,10 +112,31 @@ Anonymous mode (omitting `login_as`) is currently broken by an open,
 unresolved Instaloader bug (403 on the GraphQL endpoint) — use the
 logged-in/session-import method above.
 
-Then continue the pipeline as normal — `preprocess_ig.py` onward already
-picks up the new data automatically, no extra steps needed.
+### Extra capabilities: `fetch_instaloader_extra.py`
 
----
+Tested against real data, 2026-07-16:
+
+| Capability | Status | Notes |
+|---|---|---|
+| Profile metadata | ✅ Working | Single request, no pagination |
+| Tagged posts | ✅ Working | |
+| Followers | ✅ Working | ⚠️ High risk — Instagram heavily monitors this |
+| Followees | ✅ Working | ⚠️ High risk |
+| Stories | ✅ Working | ⚠️ High risk, ephemeral (24h) — 31 items took ~3 min due to deliberate delay |
+| Hashtag search | ❌ Broken | Confirmed open Instaloader bug — `KeyError: edge_hashtag_to_media` |
+| Location posts | ❌ Broken | Confirmed open Instaloader bug (GitHub #2447) — `201 Created` error |
+| Comments (real text) | ⚠️ Uncertain | Generic Instagram server-side "fail" response, not a code bug. Highest-risk function — don't retry repeatedly if it fails. |
+
+```bash
+python fetch_instaloader_extra.py profile <username> <login_as>
+python fetch_instaloader_extra.py tagged <username> <login_as> [limit]
+python fetch_instaloader_extra.py followers <username> <login_as> [limit]
+python fetch_instaloader_extra.py followees <username> <login_as> [limit]
+python fetch_instaloader_extra.py stories <username> <login_as>
+python fetch_instaloader_extra.py comments <post_url> <login_as> [limit]  # use sparingly
+```
+
+
 
 ## Database Schema (10 Tables)
 

@@ -55,6 +55,116 @@ LOW_RISK_DELAY = 3
 HIGH_RISK_DELAY = 6
 
 
+def _extract_media_objects(node, found=None):
+    """Recursively walk a nested dict/list and collect every object that
+    looks like a real Instagram media/post object (has 'pk', 'media_type',
+    'taken_at', AND a real 'code' + owning 'user' — filters out ad
+    placeholders/other cards that share some but not all of these keys,
+    which showed up as empty entries in real testing)."""
+    if found is None:
+        found = []
+    if isinstance(node, dict):
+        if (node.get("pk") and node.get("media_type") and node.get("taken_at")
+                and node.get("code") and node.get("user", {}).get("username")):
+            found.append(node)
+        for value in node.values():
+            _extract_media_objects(value, found)
+    elif isinstance(node, list):
+        for item in node:
+            _extract_media_objects(item, found)
+    return found
+
+
+def _iphone_media_to_post(media: dict) -> dict:
+    """Map the v1/iPhone media object shape to this project's standard
+    post shape (same mapping style PR #2706 established for post metadata)."""
+    caption_obj = media.get("caption") or {}
+    user = media.get("user") or {}
+    media_type_int = media.get("media_type")
+    return {
+        "id": str(media.get("pk")),
+        "shortcode": media.get("code", ""),
+        "caption": caption_obj.get("text", "") if isinstance(caption_obj, dict) else "",
+        "media_type": {1: "IMAGE", 2: "VIDEO", 8: "CAROUSEL_ALBUM"}.get(media_type_int, "UNKNOWN"),
+        "media_url": "",  # image_versions2 nested structure varies — skip for now, not critical
+        "permalink": f"https://www.instagram.com/p/{media.get('code','')}/",
+        "timestamp": __import__("datetime").datetime.fromtimestamp(
+            media.get("taken_at", 0), tz=__import__("datetime").timezone.utc
+        ).isoformat() if media.get("taken_at") else "",
+        "like_count": media.get("like_count", 0),
+        "comments_count": media.get("comment_count", 0),
+        "comments": [],
+        "owner_username": user.get("username", ""),
+    }
+
+
+def fetch_hashtag_posts_experimental(hashtag: str, login_as: str, limit: int = 10):
+    """
+    EXPERIMENTAL — bypasses the broken instaloader.Hashtag.get_posts() by
+    calling the newer api/v1/tags/web_info/ endpoint directly via
+    get_iphone_json(). CONFIRMED WORKING 2026-07-16 — returns real "top"
+    posts for the hashtag (Instagram's Top tab equivalent, not a full
+    chronological/comprehensive feed the way the old edge_hashtag_to_media
+    pagination provided).
+
+    Not part of Instaloader's public API — calling Instagram's backend more
+    directly than the library's own abstraction currently supports.
+    """
+    hashtag = hashtag.lstrip("#")
+    log.info(f"EXPERIMENTAL: direct web_info endpoint for #{hashtag}")
+
+    L = _get_client(login_as)
+
+    try:
+        response = L.context.get_iphone_json(
+            "api/v1/tags/web_info/", {"tag_name": hashtag}
+        )
+    except Exception as e:
+        log.error(f"  Direct endpoint call failed: {type(e).__name__}: {e}")
+        return False, None
+
+    media_objects = _extract_media_objects(response)
+    posts = [_iphone_media_to_post(m) for m in media_objects[:limit]]
+
+    log.info(f"  ✓ Extracted {len(posts)} posts (from {len(media_objects)} found, capped at limit={limit})")
+    for p in posts:
+        log.info(f"    {p['shortcode']} (@{p['owner_username']}) — {p['like_count']} likes, {p['comments_count']} comments")
+
+    return True, {"posts": posts, "count": len(posts)}
+
+
+def fetch_location_experimental(location_id: str, login_as: str, limit: int = 10):
+    """
+    EXPERIMENTAL — same approach as fetch_hashtag_posts_experimental.
+    CONFIRMED WORKING 2026-07-16 — same nested media-object structure as
+    the hashtag endpoint, reuses the same extraction helpers. Returns
+    "ranked" (Instagram's algorithmic top) posts for the location, not a
+    full chronological feed.
+    """
+    log.info(f"EXPERIMENTAL: direct web_info endpoint for location {location_id}")
+    L = _get_client(login_as)
+
+    try:
+        response = L.context.get_iphone_json(
+            "api/v1/locations/web_info/", {"location_id": location_id}
+        )
+    except Exception as e:
+        log.error(f"  Direct endpoint call failed: {type(e).__name__}: {e}")
+        return False, None
+
+    location_info = response.get("native_location_data", {}).get("location_info", {})
+    log.info(f"  ✓ {location_info.get('name', location_id)} — {location_info.get('media_count', 0)} total posts")
+
+    media_objects = _extract_media_objects(response)
+    posts = [_iphone_media_to_post(m) for m in media_objects[:limit]]
+
+    log.info(f"  ✓ Extracted {len(posts)} posts (from {len(media_objects)} found, capped at limit={limit})")
+    for p in posts:
+        log.info(f"    {p['shortcode']} (@{p['owner_username']}) — {p['like_count']} likes, {p['comments_count']} comments")
+
+    return True, {"posts": posts, "count": len(posts)}
+
+
 def _get_client(login_as: str):
     L = instaloader.Instaloader(
         download_pictures=False, download_videos=False,
@@ -307,6 +417,26 @@ if __name__ == "__main__":
         if success:
             print(json.dumps(data, indent=2))
             print(f"Saved -> {_save_generic(f'{username}_profile_info', data)}")
+
+    elif command == "hashtag-experimental":
+        hashtag, login_as = sys.argv[2], sys.argv[3].lstrip("@")
+        limit = int(sys.argv[4]) if len(sys.argv) > 4 else 10
+        success, data = fetch_hashtag_posts_experimental(hashtag, login_as, limit)
+        if success:
+            label = f"hashtag_{hashtag.lstrip('#')}"
+            raw_path = save_raw(label, data)
+            processed_path = save_processed_ig(label, data, source="instaloader")
+            print(f"Raw saved -> {raw_path}\nProcessed saved -> {processed_path}")
+
+    elif command == "location-experimental":
+        location_id, login_as = sys.argv[2], sys.argv[3].lstrip("@")
+        limit = int(sys.argv[4]) if len(sys.argv) > 4 else 10
+        success, data = fetch_location_experimental(location_id, login_as, limit)
+        if success:
+            label = f"location_{location_id}"
+            raw_path = save_raw(label, data)
+            processed_path = save_processed_ig(label, data, source="instaloader")
+            print(f"Raw saved -> {raw_path}\nProcessed saved -> {processed_path}")
 
     else:
         print(f"Unknown command: {command}")

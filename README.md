@@ -123,8 +123,8 @@ Tested against real data, 2026-07-16:
 | Followers | ✅ Working | ⚠️ High risk — Instagram heavily monitors this |
 | Followees | ✅ Working | ⚠️ High risk |
 | Stories | ✅ Working | ⚠️ High risk, ephemeral (24h) — 31 items took ~3 min due to deliberate delay |
-| Hashtag search | ❌ Broken | Confirmed open Instaloader bug — `KeyError: edge_hashtag_to_media` |
-| Location posts | ❌ Broken | Confirmed open Instaloader bug (GitHub #2447) — `201 Created` error |
+| Hashtag search | ✅ Working | Instaloader's own `Hashtag.get_posts()` is broken (confirmed multi-year open bug) — fixed by calling `api/v1/tags/web_info/` directly via `get_iphone_json()`, bypassing the library's high-level class entirely. Returns Instagram's "Top" posts for the tag, not a full chronological feed. |
+| Location posts | ✅ Working | Same situation and same fix as hashtags — `instaloader.get_location_posts()` is broken (open GitHub issue #2447), fixed via `api/v1/locations/web_info/` directly. Bonus: also returns location metadata (name, category, total post count). |
 | Comments (real text) | ⚠️ Uncertain | Generic Instagram server-side "fail" response, not a code bug. Highest-risk function — don't retry repeatedly if it fails. |
 
 ```bash
@@ -134,6 +134,8 @@ python fetch_instaloader_extra.py followers <username> <login_as> [limit]
 python fetch_instaloader_extra.py followees <username> <login_as> [limit]
 python fetch_instaloader_extra.py stories <username> <login_as>
 python fetch_instaloader_extra.py comments <post_url> <login_as> [limit]  # use sparingly
+python fetch_instaloader_extra.py hashtag-experimental <hashtag> <login_as> [limit]
+python fetch_instaloader_extra.py location-experimental <location_id> <login_as> [limit]
 ```
 
 

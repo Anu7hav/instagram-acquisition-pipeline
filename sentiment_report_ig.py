@@ -140,7 +140,18 @@ if engagement and sentiment:
     for acc, e in high_eng:
         if acc in sentiment:
             s = sentiment[acc]
-            dominant = max(["positive","neutral","negative"], key=lambda x: s[x])
+            counts = {label: s[label] for label in ["positive", "neutral", "negative"]}
+            max_count = max(counts.values())
+            tied_labels = [label for label, count in counts.items() if count == max_count]
+            # BUG FIX (mentor review): max(["positive","neutral","negative"], key=lambda x: s[x])
+            # silently returned "positive" on every exact tie, since Python's max() picks the
+            # first element achieving the max value and "positive" is listed first — a genuine
+            # 1/1/1 split was confidently reported as "dominant sentiment: positive". Now
+            # detects ties explicitly and reports "mixed" instead of guessing.
+            if len(tied_labels) > 1:
+                dominant = f"mixed ({'/'.join(tied_labels)} tied at {max_count})"
+            else:
+                dominant = tied_labels[0]
             w(f"- `{acc}`: {e['avg_likes']:.1f} avg likes — dominant sentiment: **{dominant}**")
 w("")
 

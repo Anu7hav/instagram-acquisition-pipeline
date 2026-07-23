@@ -80,8 +80,8 @@ ROBERTA_LABELS     = ["negative", "neutral", "positive"]
 nlp       = spacy.load("en_core_web_sm")
 STOPWORDS = set(stopwords.words("english"))
 
-NEUTRAL_VADER   = {"compound": 0.0, "pos": 0.0, "neu": 1.0, "neg": 0.0, "label": "neutral"}
-NEUTRAL_ROBERTA = {"label": "neutral", "scores": {"negative": 0.0, "neutral": 1.0, "positive": 0.0}}
+NEUTRAL_VADER   = {"compound": 0.0, "pos": 0.0, "neu": 1.0, "neg": 0.0, "label": "neutral", "confidence": 1.0}
+NEUTRAL_ROBERTA = {"label": "neutral", "scores": {"negative": 0.0, "neutral": 1.0, "positive": 0.0}, "confidence": 1.0}
 
 
 def extract_hashtags(text): return re.findall(r"#(\w+)", text) if text else []
@@ -133,13 +133,35 @@ def batch_roberta_sentiment(texts: list) -> list:
             with torch.no_grad():
                 logits = _roberta_model(**inputs).logits
             for probs in torch.softmax(logits, dim=1).cpu().tolist():
-                label  = ROBERTA_LABELS[probs.index(max(probs))]
-                scores = {l: round(p, 4) for l, p in zip(ROBERTA_LABELS, probs)}
-                results.append({"label": label, "scores": scores})
+                label      = ROBERTA_LABELS[probs.index(max(probs))]
+                confidence = round(max(probs), 4)
+                scores     = {l: round(p, 4) for l, p in zip(ROBERTA_LABELS, probs)}
+                results.append({"label": label, "scores": scores, "confidence": confidence})
         except Exception:
             for _ in batch:
                 results.append(dict(NEUTRAL_ROBERTA))
     return results
+
+
+def get_final_sentiment(vader: dict, roberta: dict) -> dict:
+    """
+    BUG FIX (mentor review): previously final_label was hardcoded to
+    roberta['label'] unconditionally — post['sentiment']['final_label'] =
+    roberta['label'] — meaning VADER was computed and stored but never
+    actually used for anything. This compares confidence scores and picks
+    whichever model is more confident, exactly as specified.
+    """
+    if vader["confidence"] > roberta["confidence"]:
+        return {
+            "label": vader["label"],
+            "confidence": vader["confidence"],
+            "source": "VADER"
+        }
+    return {
+        "label": roberta["label"],
+        "confidence": roberta["confidence"],
+        "source": "RoBERTa"
+    }
 
 
 def get_vader_sentiment(text: str) -> dict:
@@ -147,8 +169,13 @@ def get_vader_sentiment(text: str) -> dict:
         return dict(NEUTRAL_VADER)
     s = vader.polarity_scores(text)
     c = s["compound"]
+    label = "positive" if c>=0.05 else "negative" if c<=-0.05 else "neutral"
+    # confidence on the same 0-1 scale as RoBERTa's softmax max-probability
+    # (max of pos/neu/neg), NOT abs(compound) — needed so get_final_sentiment()
+    # compares like with like rather than two differently-scaled numbers.
+    confidence = round(max(s["pos"], s["neu"], s["neg"]), 4)
     return {"compound": round(c,4), "pos": round(s["pos"],4), "neu": round(s["neu"],4),
-            "neg": round(s["neg"],4), "label": "positive" if c>=0.05 else "negative" if c<=-0.05 else "neutral"}
+            "neg": round(s["neg"],4), "label": label, "confidence": confidence}
 
 
 def batch_tfidf_keywords(texts: list, top_n=10) -> list:
@@ -261,8 +288,13 @@ def preprocess_file(filepath: str, output_dir: str = "data/nlp"):
 
     roberta_results = batch_roberta_sentiment(cleaned_texts)
     for post, roberta in zip(posts, roberta_results):
-        post["sentiment"]["roberta"]     = roberta
-        post["sentiment"]["final_label"] = roberta["label"]
+        vader = post["sentiment"]["vader"]
+        post["sentiment"]["roberta"] = roberta
+        final = get_final_sentiment(vader, roberta)
+        post["sentiment"]["final"]          = final  # matches mentor-specified nested shape
+        post["sentiment"]["final_label"]      = final["label"]       # flat keys kept for
+        post["sentiment"]["final_confidence"] = final["confidence"]  # backward compatibility
+        post["sentiment"]["final_source"]     = final["source"]      # with db_manager_ig.py
 
     tfidf_keywords = batch_tfidf_keywords(cleaned_texts)
     for post, kws in zip(posts, tfidf_keywords):

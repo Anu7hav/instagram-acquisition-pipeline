@@ -115,11 +115,15 @@ def init_db(db_path: str = DB_PATH):
                 vader_neu         REAL,
                 vader_neg         REAL,
                 vader_label       TEXT,
+                vader_confidence  REAL,
                 roberta_label     TEXT,
                 roberta_neg       REAL,
                 roberta_neu       REAL,
                 roberta_pos       REAL,
+                roberta_confidence REAL,
                 final_label       TEXT,
+                final_confidence  REAL,
+                final_source      TEXT,
                 eng_likes         INTEGER DEFAULT 0,
                 eng_comments      INTEGER DEFAULT 0
             );
@@ -249,6 +253,7 @@ def insert_nlp(conn, fetch_run_id: int, posts: list) -> int:
         sentiment  = p.get("sentiment", {})
         vader      = sentiment.get("vader", {})
         roberta    = sentiment.get("roberta", {})
+        final      = sentiment.get("final", {})
         rob_scores = roberta.get("scores", {})
         eng        = p.get("engagement", {})
         try:
@@ -256,16 +261,21 @@ def insert_nlp(conn, fetch_run_id: int, posts: list) -> int:
                 INSERT OR REPLACE INTO post_nlp
                     (post_id, fetch_run_id, cleaned_text,
                      tokens, lemmatized_tokens, mentions, emojis, urls,
-                     vader_compound, vader_pos, vader_neu, vader_neg, vader_label,
-                     roberta_label, roberta_neg, roberta_neu, roberta_pos, final_label,
+                     vader_compound, vader_pos, vader_neu, vader_neg, vader_label, vader_confidence,
+                     roberta_label, roberta_neg, roberta_neu, roberta_pos, roberta_confidence,
+                     final_label, final_confidence, final_source,
                      eng_likes, eng_comments)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (post_id, fetch_run_id, p.get("cleaned_text"),
                   _j(p.get("tokens", [])), _j(p.get("lemmatized_tokens", [])),
                   _j(p.get("mentions", [])), _j(p.get("emojis", [])), _j(p.get("urls", [])),
-                  vader.get("compound"), vader.get("pos"), vader.get("neu"), vader.get("neg"), vader.get("label"),
-                  roberta.get("label"), rob_scores.get("negative"), rob_scores.get("neutral"), rob_scores.get("positive"),
-                  sentiment.get("final_label"),
+                  vader.get("compound"), vader.get("pos"), vader.get("neu"), vader.get("neg"),
+                  vader.get("label"), vader.get("confidence"),
+                  roberta.get("label"), rob_scores.get("negative"), rob_scores.get("neutral"),
+                  rob_scores.get("positive"), roberta.get("confidence"),
+                  final.get("label", sentiment.get("final_label")),
+                  final.get("confidence", sentiment.get("final_confidence")),
+                  final.get("source", sentiment.get("final_source")),
                   eng.get("likes", 0), eng.get("comments", 0)))
             inserted += 1
         except Exception as e:

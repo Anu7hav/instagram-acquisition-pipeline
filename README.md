@@ -135,7 +135,7 @@ python fetch_instaloader_extra.py followees <username> <login_as> [limit]
 python fetch_instaloader_extra.py stories <username> <login_as>
 python fetch_instaloader_extra.py comments <post_url> <login_as> [limit]  # use sparingly
 python fetch_instaloader_extra.py hashtag-experimental <hashtag> <login_as> [limit]
-python fetch_instaloader_extra.py location-experimental <location_id> <login_as> [limit]
+python fetch_instaloader_extra.py location <location_id> <login_as> [limit]
 ```
 
 

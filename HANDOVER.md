@@ -100,7 +100,7 @@ Then test each capability:
 python fetch_instaloader.py ndtv 5 your_account_username
 python fetch_instaloader_url.py https://www.instagram.com/reel/SOME_CODE/ your_account_username
 python fetch_instaloader_extra.py hashtag-experimental memes your_account_username 5
-python fetch_instaloader_extra.py location-experimental 213385402 your_account_username 5
+python fetch_instaloader_extra.py location 213385402 your_account_username 5
 ```
 
 **Expected output for each:** a list of real, current Instagram posts —

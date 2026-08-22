@@ -1,23 +1,25 @@
 """
-main_ig.py — Instagram acquisition pipeline entry point.
+main_ig.py -- Instagram acquisition pipeline entry point.
 Equivalent of main.py (Twitter branch). Same scope: fetch + save_raw +
-save_processed only — NLP/analysis/charts stay separate manual scripts
-(preprocess_ig.py / analysis_ig.py / visualise_ig.py / sentiment_report_ig.py),
-exactly as they are on the Twitter branch too.
+save_processed only -- NLP/analysis/charts stay separate manual scripts.
 
 Key differences from main.py:
-  - Reads accounts.txt instead of queries.txt — IMPORTANT: unlike Twitter
-    queries (arbitrary search terms), these must be IG Business/Creator
-    accounts you actually have tester/admin access to. Adding a random
-    username here will fail, not just return empty results.
-  - No pagination toggle / USE_PAGINATION — fetch_ig.py always paginates
-    internally now (see the pagination fix), so there's no fetch_all_pages
-    equivalent needed here.
-  - check_token() replaces check_credits() — Graph API doesn't have a
-    credit-balance concept, just token validity.
+  - Reads accounts.txt instead of queries.txt -- must be an IG
+    Business/Creator account you actually have tester/admin access to.
+  - No pagination toggle -- fetch_ig.py always paginates internally.
+  - check_token() replaces check_credits().
 
-Scheduler behavior (RUN_INTERVAL_HOURS, MAX_RUNS, SCHEDULER_ENABLED) reuses
-the exact same config.py settings the Twitter branch already defines.
+TOKEN REFRESH (added per mentor instruction, 2026-08-03): before each run,
+checks how many days remain on the current token (via
+ig_client.get_token_days_remaining()). If below IG_MIN_TOKEN_DAYS_REMAINING
+(config.py), refreshes automatically before continuing -- required for
+unattended multi-day scheduler runs, since the token would otherwise
+silently expire mid-window with no one there to notice.
+
+RUN LOGGING (added per mentor instruction, 2026-08-03): every run attempt
+(success or failure) is recorded via run_logger.log_attempt(), so a
+multi-day unattended run produces a complete record, not just terminal
+output that scrolls away.
 """
 
 import logging
@@ -27,7 +29,8 @@ from config import *
 from fetch_ig import fetch_account_data
 from save_raw import save_raw
 from save_processed_ig import save_processed_ig
-from ig_client import check_token
+from ig_client import check_token, get_token_days_remaining, refresh_long_lived_token
+from run_logger import log_attempt, classify_error
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,15 +43,10 @@ ACCOUNTS_FILE = "accounts.txt"
 
 
 def load_accounts():
-    """Load and deduplicate account usernames from file.
-
-    BUG FIX (mentor review): a Business Login token is tied to exactly ONE
-    account — fetch_ig.py always pulls the token's own account via /me
-    regardless of what's configured here. Previously accounts.txt could
-    silently list multiple usernames with no warning that only one would
-    ever actually be used. Now rejects >1 account outright rather than
-    silently ignoring the rest.
-    """
+    """Load and deduplicate account usernames from file. Rejects >1
+    account outright -- a Business Login token is tied to exactly one
+    account, fetch_ig.py always pulls the token's own account via /me
+    regardless of what's configured here."""
     with open(ACCOUNTS_FILE, "r") as f:
         raw_accounts = [line.strip() for line in f if line.strip() and not line.startswith("#")]
     accounts = list(dict.fromkeys(raw_accounts))
@@ -66,35 +64,65 @@ def load_accounts():
     return accounts
 
 
-def run_pipeline(accounts, run_number):
-    """Run one full pipeline pass over the configured account.
+def ensure_token_fresh():
+    """Check remaining token validity; refresh if below threshold. Logs
+    clearly whenever a refresh happens (old expiry vs new expiry -- the
+    actual before/after numbers are logged inside refresh_long_lived_token()
+    itself). Returns True if the token is fine to proceed with, False if
+    a needed refresh failed (caller should stop rather than proceed on a
+    token that may expire imminently)."""
+    days_remaining = get_token_days_remaining()
+    log.info(f"Token validity check: ~{days_remaining} days remaining")
 
-    BUG FIX (mentor review): previously used the configured account name
-    from accounts.txt directly for save_raw/save_processed_ig, trusting it
-    blindly. Now verifies it against the actual authenticated username
-    from /me and stops execution on any mismatch — the /me endpoint always
-    returns the account that owns the access token, so a mismatch means
-    accounts.txt and the .env token don't agree, which would otherwise
-    silently mislabel data under the wrong account name.
-    """
+    if days_remaining < IG_MIN_TOKEN_DAYS_REMAINING:
+        log.warning(
+            f"Token has ~{days_remaining} days remaining, below the "
+            f"{IG_MIN_TOKEN_DAYS_REMAINING}-day threshold -- refreshing now"
+        )
+        new_token = refresh_long_lived_token()
+        if not new_token:
+            log.error(
+                "Token refresh FAILED. Continuing with the existing token "
+                "for this run, but it may expire before the next scheduled "
+                "run if this isn't resolved."
+            )
+            return False
+    return True
+
+
+def run_pipeline(accounts, run_number):
+    """Run one full pipeline pass over the configured account. Verifies
+    the configured account against the actual authenticated account from
+    /me before saving anything -- a mismatch stops execution rather than
+    silently mislabeling data."""
     log.info(f"{'#'*50}")
     log.info(f"RUN #{run_number} started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     log.info(f"Pipeline version: {PIPELINE_VERSION}")
     log.info(f"{'#'*50}")
 
+    ensure_token_fresh()
+
     account_info = check_token()
     if not account_info:
         log.error("Stopping pipeline: token check failed.")
+        log_attempt("graph_api", accounts[0] if accounts else "unknown",
+                    success=False, error_type="token_or_session_invalid",
+                    error_message="check_token() returned None")
         return
 
     verified_username = account_info.get("username")
     if not verified_username:
-        raise RuntimeError(
-            "Instagram API did not return the authenticated username."
-        )
+        err = "Instagram API did not return the authenticated username."
+        log_attempt("graph_api", accounts[0] if accounts else "unknown",
+                    success=False, error_type="unknown", error_message=err)
+        raise RuntimeError(err)
 
     configured_account = accounts[0]
     if configured_account != verified_username:
+        err = (f"Account mismatch: configured={configured_account}, "
+               f"authenticated={verified_username}")
+        log_attempt("graph_api", configured_account, success=False,
+                    error_type="unknown", error_message=err)
         raise ValueError(
             f"\nAccount mismatch detected!\n\n"
             f"Configured account : {configured_account}\n"
@@ -102,24 +130,32 @@ def run_pipeline(accounts, run_number):
             "The /me endpoint always returns the account that owns "
             "the access token.\n"
             "Please either:\n"
-            "  • update accounts.txt to match the authenticated account\n"
-            "  • use a matching access token\n"
+            "  - update accounts.txt to match the authenticated account\n"
+            "  - use a matching access token\n"
         )
 
     log.info(f"{'='*50}")
     log.info(f"Account: '{verified_username}' (verified against authenticated token)")
     log.info(f"{'='*50}")
 
-    # NOTE: fetch_account_data currently always pulls the token's own
-    # account (via the /me alias) — see fetch_ig.py's module docstring.
-    # With the verification above, we now know verified_username is
-    # genuinely the account being fetched, not just an assumption.
-    success, data = fetch_account_data()
+    try:
+        success, data = fetch_account_data()
+    except Exception as e:
+        log.error(f"Fetch raised an exception for '{verified_username}': {e}")
+        log_attempt("graph_api", verified_username, success=False,
+                    error_type=classify_error(e), error_message=str(e))
+        log.info(f"RUN #{run_number} completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (with error)")
+        return
+
     if not success:
         log.warning(f"Fetch failed for account: '{verified_username}'")
+        log_attempt("graph_api", verified_username, success=False,
+                    error_type="empty_response", error_message="fetch_account_data() returned success=False")
     else:
         save_raw(verified_username, data)
         save_processed_ig(verified_username, data)
+        log_attempt("graph_api", verified_username, success=True,
+                    extra={"post_count": data.get("count", 0)})
 
     log.info(f"RUN #{run_number} completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -130,7 +166,7 @@ run_number = 1
 if not SCHEDULER_ENABLED:
     run_pipeline(accounts, run_number)
 else:
-    log.info(f"Scheduler enabled — running every {RUN_INTERVAL_HOURS}h | Max runs: {'∞' if MAX_RUNS == 0 else MAX_RUNS}")
+    log.info(f"Scheduler enabled -- running every {RUN_INTERVAL_HOURS}h | Max runs: {'unlimited' if MAX_RUNS == 0 else MAX_RUNS}")
     while True:
         accounts = load_accounts()
         run_pipeline(accounts, run_number)
@@ -140,7 +176,7 @@ else:
             break
 
         wait_seconds = RUN_INTERVAL_HOURS * 3600
-        log.info(f"Next run in {RUN_INTERVAL_HOURS}h — sleeping until then. Press Ctrl+C to stop.")
+        log.info(f"Next run in {RUN_INTERVAL_HOURS}h -- sleeping until then. Press Ctrl+C to stop.")
 
         try:
             time.sleep(wait_seconds)

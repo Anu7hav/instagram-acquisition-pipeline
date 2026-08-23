@@ -19,7 +19,8 @@ silently expire mid-window with no one there to notice.
 RUN LOGGING (added per mentor instruction, 2026-08-03): every run attempt
 (success or failure) is recorded via run_logger.log_attempt(), so a
 multi-day unattended run produces a complete record, not just terminal
-output that scrolls away.
+output that scrolls away. This includes token-refresh failures, which are
+now logged (not just printed) and treated as a run-stopping condition.
 """
 
 import logging
@@ -70,7 +71,12 @@ def ensure_token_fresh():
     actual before/after numbers are logged inside refresh_long_lived_token()
     itself). Returns True if the token is fine to proceed with, False if
     a needed refresh failed (caller should stop rather than proceed on a
-    token that may expire imminently)."""
+    token that may expire imminently).
+
+    A failed refresh is also recorded via log_attempt() (not just printed
+    to the terminal), so it shows up in run_log.jsonl and in summarize()
+    -- otherwise a multi-day unattended run could hit this repeatedly with
+    no record of it anywhere but scrolled-away terminal output."""
     days_remaining = get_token_days_remaining()
     log.info(f"Token validity check: ~{days_remaining} days remaining")
 
@@ -86,6 +92,10 @@ def ensure_token_fresh():
                 "for this run, but it may expire before the next scheduled "
                 "run if this isn't resolved."
             )
+            log_attempt("graph_api", "token_refresh", success=False,
+                        error_type="token_or_session_invalid",
+                        error_message=f"refresh_long_lived_token() returned None "
+                                       f"(had ~{days_remaining}d remaining)")
             return False
     return True
 
@@ -100,7 +110,10 @@ def run_pipeline(accounts, run_number):
     log.info(f"Pipeline version: {PIPELINE_VERSION}")
     log.info(f"{'#'*50}")
 
-    ensure_token_fresh()
+    if not ensure_token_fresh():
+        log.error("Stopping pipeline: token refresh failed and token may expire imminently.")
+        log.info(f"RUN #{run_number} completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (with error)")
+        return
 
     account_info = check_token()
     if not account_info:

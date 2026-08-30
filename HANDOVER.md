@@ -22,7 +22,9 @@ Instagram's official API and the project's actual needs don't fully overlap:
   capability at all for accounts outside our own.
 
 Both methods feed the same downstream analysis pipeline — a post is a post
-regardless of which method fetched it.
+regardless of which method fetched it. Both also run **continuously and
+unattended** via their own scheduler (`main_ig.py` / `main_instaloader.py`),
+logging every attempt through a shared `run_logger.py`.
 
 ---
 
@@ -97,10 +99,11 @@ python import_firefox_session.py
 
 Then test each capability:
 ```bash
-python fetch_instaloader.py ndtv 5 your_account_username
-python fetch_instaloader_url.py https://www.instagram.com/reel/SOME_CODE/ your_account_username
-python fetch_instaloader_extra.py hashtag-experimental memes your_account_username 5
-python fetch_instaloader_extra.py location 213385402 your_account_username 5
+python fetch_instaloader.py theviralfever 5 your_throwaway_username
+python fetch_instaloader_extra.py profile theviralfever your_throwaway_username
+python fetch_instaloader_extra.py tagged theviralfever your_throwaway_username 5
+python fetch_instaloader_extra.py hashtag-experimental indianmemes your_throwaway_username 5
+python fetch_instaloader_extra.py location 416430758372868 your_throwaway_username 5
 ```
 
 **Expected output for each:** a list of real, current Instagram posts —
@@ -129,6 +132,60 @@ python -c "import sqlite3; c = sqlite3.connect('pipeline_ig.db'); print(c.execut
 ```
 Confirms real rows exist in the database, not just files on disk.
 
+### 3.6 Multi-day continuous run validation (mentor-requested, completed)
+
+Both paths were run continuously and unattended, per instruction, without
+manual restarts during the window. Full raw log: `run_log.jsonl`
+(gitignored — available on request).
+
+**Token refresh:** wired into `main_ig.py`; verified by manually forcing a
+refresh (temporarily raising `IG_MIN_TOKEN_DAYS_REMAINING`) — confirmed it
+fires, persists to `.env` and `token_state.json`, and logs old→new expiry.
+During the actual unattended window the token stayed at 58–60 days
+remaining throughout (well above the 10-day threshold), so a refresh never
+naturally triggered — noted honestly rather than claimed.
+
+**Graph API path (`main_ig.py`, `SCHEDULER_ENABLED=True`,
+`RUN_INTERVAL_HOURS=2`):**
+- Window: 2026-08-23 ~12:34 to 2026-08-30 ~05:32 — **6.7+ days**,
+  uninterrupted, untouched
+- 45+ runs completed
+- One real failure window: 2026-08-24, 4 consecutive
+  `token_or_session_invalid` failures (connection errors, not an actual
+  expired token) spanning ~12 hours; self-recovered without any manual
+  intervention
+
+**Instaloader path (`main_instaloader.py`, 3 randomized daily
+slots/rotating real targets):**
+- Window: 2026-08-26 ~16:29 onward — 3.5+ days
+- Real target set used (not placeholders — chosen for relevance to the
+  general/social-issues meme content research focus, India-focused):
+  accounts `theviralfever`, `rvcjinsta`, `ghantaa`; hashtags
+  `indianmemes`, `socialissues`, `desimemes`; location: Jantar Mantar,
+  Delhi (`416430758372868`) — a well-known protest site
+- All four `fetch_instaloader_extra.py` endpoint types
+  (`profile`, `hashtag-experimental`, `tagged`, `location`) exercised
+  successfully against real data
+- One real failure observed: an SSL certificate verification error
+  (self-signed cert in chain — most likely local antivirus/VPN TLS
+  interception, not an Instagram-side block) on 2026-08-29. The scheduler
+  logged it and correctly moved on to the next slot without crashing.
+- **This failure exposed two real bugs**, documented in README.md's "Run
+  Logging & Failure Tracking" section and not yet fixed:
+  1. `classify_error()` only inspects the exception type name, so
+     connection/SSL failures relayed through `main_instaloader.py`'s
+     subprocess wrapper get bucketed as `unknown` instead of
+     `connection_error`
+  2. `fetch_instaloader.py` crashes with `UnicodeEncodeError` on its own
+     failure-print (`✗` character vs. Windows `cp1252` console) — the
+     underlying error is still logged correctly before the crash, so no
+     data is lost, but the traceback is messy
+
+**Failure logging (`run_logger.py`):** every attempt on both paths,
+success or failure, logged with timestamp, path, target, and a classified
+error type; `python run_logger.py` produces the end-of-window summary
+(total attempts, per-path success/failure counts, failure-type breakdown).
+
 ---
 
 ## 4. What To Look At Specifically
@@ -138,6 +195,8 @@ Confirms real rows exist in the database, not just files on disk.
 - **`data/charts/`** — visual sentiment/engagement/hashtag breakdowns
 - **`pipeline_ig.db`** — the actual relational data, queryable directly
   with any SQLite browser if you want to inspect it more deeply
+- **`run_log.jsonl`** — the raw multi-day run log (gitignored, available
+  on request) — every attempt on both paths, timestamped and classified
 
 ---
 
@@ -161,11 +220,22 @@ Confirms real rows exist in the database, not just files on disk.
 - **Tested at small-to-moderate scale so far** — proven against real data
   from multiple accounts/hashtags/locations, but not stress-tested at high
   volume.
+- **Two known bugs in the failure-logging path**, found during the
+  multi-day validation run, not yet fixed: `classify_error()`
+  misclassifies connection/SSL failures as `unknown` when relayed through
+  `main_instaloader.py`'s subprocess wrapper, and `fetch_instaloader.py`
+  crashes on its own failure-print due to a Unicode/Windows-console
+  incompatibility. Neither causes data loss — the underlying error is
+  still logged before either issue occurs. Full detail in README.md.
+- **Instaloader path used a dedicated throwaway account** (`login_as`),
+  deliberately kept separate from the Graph API path's authorized account,
+  so a checkpoint/restriction on the fragile path can never affect the
+  official-API path.
 
 ---
 
 ## 6. Full File Reference
 
 See `README.md` in the repo for the complete file-by-file breakdown,
-database schema, and NLP stack details — this document is the "how to
-verify it works" companion to that.
+database schema, NLP stack details, and the run-logging design — this
+document is the "how to verify it works" companion to that.

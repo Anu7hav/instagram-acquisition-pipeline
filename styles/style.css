@@ -1,0 +1,350 @@
+
+/* ============================================================
+   INSTAGRAM RESEARCH — PROFESSIONAL NAVY / BLUE / TEAL THEME
+   ============================================================ */
+
+:root {
+    --bg: #0B1220;
+    --surface: #0F172A;
+    --surface-2: #111C2E;
+    --surface-3: #162235;
+    --text: #E6EDF7;
+    --muted: #94A3B8;
+    --accent: #38BDF8;
+    --accent-2: #2DD4BF;
+    --accent-soft: rgba(56, 189, 248, 0.12);
+    --border: #263449;
+    --border-soft: rgba(148, 163, 184, 0.16);
+    --warning: #FBBF24;
+    --danger: #F87171;
+    --success: #34D399;
+}
+
+/* ---------- Base ---------- */
+
+html, body, [data-testid="stAppViewContainer"] {
+    background: var(--bg) !important;
+    color: var(--text) !important;
+}
+
+[data-testid="stAppViewContainer"] {
+    background:
+        radial-gradient(circle at 85% 5%, rgba(56,189,248,.055), transparent 28rem),
+        radial-gradient(circle at 15% 35%, rgba(45,212,191,.035), transparent 24rem),
+        var(--bg) !important;
+}
+
+[data-testid="stHeader"] {
+    background: rgba(11,18,32,.88) !important;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.main .block-container {
+    max-width: 1280px;
+    padding-top: 3.2rem;
+    padding-bottom: 6rem;
+}
+
+/* ---------- Sidebar ---------- */
+
+[data-testid="stSidebar"] {
+    background: #0F172A !important;
+    border-right: 1px solid var(--border) !important;
+}
+
+[data-testid="stSidebar"] > div:first-child {
+    background: #0F172A !important;
+}
+
+[data-testid="stSidebar"] * {
+    color: var(--text);
+}
+
+[data-testid="stSidebar"] h3 {
+    color: var(--text) !important;
+    letter-spacing: .02em;
+}
+
+[data-testid="stSidebar"] hr {
+    border-color: var(--border) !important;
+}
+
+[data-testid="stSidebar"] code {
+    color: var(--accent) !important;
+    background: rgba(56,189,248,.07) !important;
+    border: 1px solid rgba(56,189,248,.14);
+}
+
+/* ---------- Typography ---------- */
+
+h1, h2, h3, h4 {
+    color: var(--text) !important;
+    letter-spacing: -0.025em;
+}
+
+p, li, label {
+    color: #CBD5E1 !important;
+    line-height: 1.75;
+}
+
+[data-testid="stCaptionContainer"] p {
+    color: var(--muted) !important;
+    letter-spacing: .035em;
+}
+
+/* ---------- Hero ---------- */
+
+.hero-eyebrow {
+    display: inline-block;
+    margin-top: 1rem;
+    margin-bottom: 1.1rem;
+    padding: .35rem .65rem;
+    border: 1px solid rgba(56,189,248,.25);
+    border-radius: 4px;
+    background: rgba(56,189,248,.07);
+    color: var(--accent) !important;
+    font-family: "JetBrains Mono", monospace;
+    font-size: .78rem;
+    letter-spacing: .08em;
+}
+
+.hero-title {
+    color: var(--text) !important;
+    font-size: clamp(3rem, 6vw, 5.5rem);
+    line-height: .98;
+    font-weight: 760;
+    letter-spacing: -.055em;
+    margin: .5rem 0 1.5rem;
+}
+
+.hero-accent {
+    color: var(--accent) !important;
+}
+
+.hero-description {
+    max-width: 820px;
+    color: #A9B7C8 !important;
+    font-size: 1.08rem;
+    line-height: 1.8;
+}
+
+/* ---------- Dividers ---------- */
+
+hr {
+    border-color: var(--border) !important;
+    opacity: 1;
+}
+
+/* ---------- Streamlit containers / cards ---------- */
+
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: var(--surface-2) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 8px 30px rgba(0,0,0,.16);
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:hover {
+    border-color: rgba(56,189,248,.30) !important;
+}
+
+/* ---------- Metrics ---------- */
+
+[data-testid="stMetric"] {
+    background: var(--surface-2) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 9px;
+    padding: 1rem 1.1rem;
+}
+
+[data-testid="stMetricValue"] {
+    color: var(--accent) !important;
+}
+
+[data-testid="stMetricLabel"] {
+    color: var(--muted) !important;
+}
+
+/* ---------- Code ---------- */
+
+code, pre {
+    font-family: "JetBrains Mono", monospace !important;
+}
+
+[data-testid="stCodeBlock"] {
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+}
+
+/* ---------- Alerts ---------- */
+
+[data-testid="stAlert"] {
+    background: var(--surface-2) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text) !important;
+    border-radius: 9px !important;
+}
+
+[data-testid="stAlert"] p {
+    color: #CBD5E1 !important;
+}
+
+/* ---------- Presenter / research context ---------- */
+
+.presenter-panel {
+    background: linear-gradient(145deg, #111C2E, #0F172A) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+}
+
+.presenter-card {
+    background: #101A2C !important;
+    border: 1px solid #2B3A51 !important;
+    border-radius: 12px !important;
+}
+
+.presenter-name {
+    color: var(--text) !important;
+}
+
+.presenter-role,
+.presenter-affiliation {
+    color: var(--muted) !important;
+}
+
+.supervision-card {
+    background: #111C2E !important;
+    border: 1px solid #2B3A51 !important;
+    border-left: 3px solid var(--accent) !important;
+    border-radius: 10px !important;
+}
+
+.supervision-role {
+    color: var(--muted) !important;
+}
+
+.supervision-person {
+    color: var(--text) !important;
+}
+
+.supervision-affiliation {
+    color: #A9B7C8 !important;
+}
+
+.context-note {
+    background: rgba(45,212,191,.07) !important;
+    border: 1px solid rgba(45,212,191,.20) !important;
+    color: #C8D8D8 !important;
+    border-radius: 9px !important;
+}
+
+.presenter-figure {
+    color: #64748B !important;
+    font-family: "JetBrains Mono", monospace;
+}
+
+/* ---------- Research figures / architecture ---------- */
+
+.research-figure {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px;
+    padding: 1rem;
+}
+
+.figure-label,
+.figure-caption {
+    color: var(--muted) !important;
+    font-family: "JetBrains Mono", monospace;
+}
+
+/* ---------- Tables ---------- */
+
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    overflow: hidden;
+}
+
+/* ---------- Inputs ---------- */
+
+input, textarea, [data-baseweb="select"] > div {
+    background: #0F172A !important;
+    color: var(--text) !important;
+    border-color: var(--border) !important;
+}
+
+input:focus, textarea:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 1px rgba(56,189,248,.2) !important;
+}
+
+/* ---------- Buttons ---------- */
+
+.stButton > button {
+    background: #132238 !important;
+    color: #DCE8F5 !important;
+    border: 1px solid #30425B !important;
+    border-radius: 7px !important;
+    transition: all .18s ease;
+}
+
+.stButton > button:hover {
+    background: #18304A !important;
+    color: #FFFFFF !important;
+    border-color: var(--accent) !important;
+}
+
+/* ---------- Links ---------- */
+
+a {
+    color: var(--accent) !important;
+}
+
+a:hover {
+    color: var(--accent-2) !important;
+}
+
+/* ---------- Plotly ---------- */
+
+.js-plotly-plot {
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface) !important;
+}
+
+/* ---------- Scrollbar ---------- */
+
+::-webkit-scrollbar {
+    width: 9px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0B1220;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #263449;
+    border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #38516E;
+}
+
+/* ---------- Mobile ---------- */
+
+@media (max-width: 768px) {
+    .main .block-container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .hero-title {
+        font-size: 3rem;
+    }
+
+    .hero-description {
+        font-size: 1rem;
+    }
+}

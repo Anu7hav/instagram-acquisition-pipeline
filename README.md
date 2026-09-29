@@ -333,6 +333,7 @@ Shared pipeline (both paths):
 
 ## Author
 **Anubhav Kumar** — B.Tech ECE, BIT Mesra
-Research Intern, IIT Guwahati (June–July 2026)
-Supervisor: Prof. Prithwijit Guha | Alloted to: Shlok Verman (M.Tech Scholar)
+Research Intern, IIT Guwahati (June–August 2026)
+Faculty Advisor - Prof. Prithwijit Guha — IIT Guwahati | Alloted to: Shlok Verman (M.Tech Scholar) and 
+Mohd. Amaan (IIT Guwahati)
 GitHub: [github.com/Anu7hav](https://github.com/Anu7hav)
